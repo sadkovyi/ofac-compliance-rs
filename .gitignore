@@ -1,0 +1,9 @@
+/target/
+AGENTS.md
+agents.md
+.env
+.env.*
+!.env.example
+*.profraw
+*.profdata
+
