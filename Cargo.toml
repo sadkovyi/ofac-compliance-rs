@@ -11,6 +11,9 @@ readme = "README.md"
 default = []
 
 [dependencies]
+roxmltree = "0.20"
+thiserror = "2"
+unicode-normalization = "0.1"
 
 [dev-dependencies]
 

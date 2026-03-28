@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic records. These names and identifiers do not describe designations. -->
+<sdnList xmlns="https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/XML">
+  <publshInformation><Publish_Date>01/01/2020</Publish_Date><Record_Count>4</Record_Count></publshInformation>
+  <sdnEntry>
+    <uid>100</uid><firstName>José</firstName><lastName>Example</lastName><sdnType>Individual</sdnType>
+    <programList><program>TEST</program></programList>
+    <akaList>
+      <aka><uid>101</uid><type>a.k.a.</type><category>strong</category><lastName>J. Example</lastName></aka>
+      <aka><uid>102</uid><type>a.k.a.</type><category>weak</category><lastName>El Ejemplo</lastName></aka>
+      <aka><uid>103</uid><type>a.k.a.</type><category>strong</category><lastName>Хосе Пример</lastName></aka>
+    </akaList>
+    <idList>
+      <id><uid>110</uid><idType>Passport</idType><idNumber>AB-001</idNumber><idCountry>Testland</idCountry><issueDate>01 Jan 2020</issueDate><expirationDate>31 Dec 2030</expirationDate></id>
+      <id><uid>111</uid><idType>Digital Currency Address - XBT</idType><idNumber>1ExampleAbC</idNumber></id>
+    </idList>
+    <addressList><address><uid>120</uid><address1>1 Test Street</address1><city>Example City</city><country>Testland</country></address></addressList>
+    <dateOfBirthList><dateOfBirthItem><uid>130</uid><dateOfBirth>circa 1970</dateOfBirth><mainEntry>true</mainEntry></dateOfBirthItem></dateOfBirthList>
+    <placeOfBirthList><placeOfBirthItem><uid>131</uid><placeOfBirth>Example City</placeOfBirth><mainEntry>true</mainEntry></placeOfBirthItem></placeOfBirthList>
+    <nationalityList><nationality><uid>140</uid><country>Testland</country><mainEntry>true</mainEntry></nationality></nationalityList>
+    <citizenshipList><citizenship><uid>141</uid><country>Testland</country><mainEntry>false</mainEntry></citizenship></citizenshipList>
+    <remarks>Synthetic &amp; deliberately incomplete identifying data.</remarks>
+  </sdnEntry>
+  <sdnEntry>
+    <uid>200</uid><lastName>Example Trading Ltd</lastName><sdnType>Entity</sdnType>
+    <programList><program>TEST</program></programList>
+    <akaList>
+      <aka><uid>201</uid><category>strong</category><lastName>Example Commodities</lastName></aka>
+      <aka><uid>202</uid><category>strong</category><lastName>Example Trading Ltd</lastName></aka>
+    </akaList>
+    <idList><id><uid>210</uid><idType>Tax ID</idType><idNumber>TAX-200</idNumber></id></idList>
+  </sdnEntry>
+  <sdnEntry>
+    <uid>300</uid><lastName>示例贸易</lastName><sdnType>Entity</sdnType>
+    <akaList><aka><uid>301</uid><category>strong</category><lastName>Example Trading Ltd</lastName></aka></akaList>
+    <futureField><detail>Preserved extension</detail></futureField>
+  </sdnEntry>
+  <sdnEntry>
+    <uid>400</uid><firstName>Amina</firstName><lastName>Example</lastName><sdnType>Individual</sdnType>
+    <akaList><aka><uid>401</uid><lastName>أمينة مثال</lastName></aka></akaList>
+  </sdnEntry>
+</sdnList>
