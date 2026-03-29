@@ -1,4 +1,6 @@
-use roxmltree::{Document, Node};
+use std::collections::HashSet;
+
+use roxmltree::{Document, Node, ParsingOptions};
 
 use crate::{
     Address, Alias, Country, DateOfBirth, Entry, Error, Identifier, List, Result, SourceField,
@@ -14,6 +16,14 @@ const LEGACY_NAMESPACE: &str = "http://tempuri.org/sdnList.xsd";
 pub struct ParseLimits {
     /// Maximum input bytes. Default: 128 MiB.
     pub max_bytes: usize,
+    /// Maximum XML nodes, including text. Default: 4,000,000.
+    pub max_nodes: u32,
+    /// Maximum nesting depth. Default: 64.
+    pub max_depth: usize,
+    /// Maximum entity records. Default: 250,000.
+    pub max_entries: usize,
+    /// Maximum text bytes in any one XML text node. Default: 1 MiB.
+    pub max_text_bytes: usize,
     /// Maximum bytes in a primary name or alias. Default: 4 KiB.
     pub max_name_bytes: usize,
 }
@@ -22,6 +32,10 @@ impl Default for ParseLimits {
     fn default() -> Self {
         Self {
             max_bytes: 128 * 1024 * 1024,
+            max_nodes: 4_000_000,
+            max_depth: 64,
+            max_entries: 250_000,
+            max_text_bytes: 1024 * 1024,
             max_name_bytes: 4096,
         }
     }
@@ -38,14 +52,20 @@ pub struct Publication {
 }
 
 /// Parse a complete standard OFAC XML document.
-pub fn parse_xml(_list: List, bytes: &[u8], limits: &ParseLimits) -> Result<Publication> {
+pub fn parse_xml(list: List, bytes: &[u8], limits: &ParseLimits) -> Result<Publication> {
     limit(bytes.len(), limits.max_bytes, "document bytes")?;
     let xml = std::str::from_utf8(bytes).map_err(|_| Error::InvalidDocument("expected UTF-8"))?;
     // Reject even empty DTD declarations. External entities are never resolved.
     if xml.contains("<!DOCTYPE") {
         return Err(Error::InvalidDocument("DTD declarations are not supported"));
     }
-    let document = Document::parse(xml)?;
+    let document = Document::parse_with_options(
+        xml,
+        ParsingOptions {
+            allow_dtd: false,
+            nodes_limit: limits.max_nodes,
+        },
+    )?;
     let root = document.root_element();
     if root.tag_name().name() != "sdnList"
         || !matches!(
@@ -56,6 +76,18 @@ pub fn parse_xml(_list: List, bytes: &[u8], limits: &ParseLimits) -> Result<Publ
         return Err(Error::InvalidDocument(
             "expected a standard OFAC sdnList root",
         ));
+    }
+    let mut pending = vec![(root, 1)];
+    while let Some((node, depth)) = pending.pop() {
+        limit(depth, limits.max_depth, "XML depth")?;
+        if node.is_text() {
+            limit(
+                node.text().unwrap_or_default().len(),
+                limits.max_text_bytes,
+                "text bytes",
+            )?;
+        }
+        pending.extend(node.children().map(|child| (child, depth + 1)));
     }
     let publication = child(root, "publshInformation")?;
     let published_date = publication
@@ -72,12 +104,25 @@ pub fn parse_xml(_list: List, bytes: &[u8], limits: &ParseLimits) -> Result<Publ
         })
         .transpose()?;
     let mut entries = Vec::new();
+    let mut identifiers = HashSet::new();
     for node in children(root, "sdnEntry") {
+        limit(entries.len() + 1, limits.max_entries, "entries")?;
         let entry = parse_entry(node, limits)?;
+        if !identifiers.insert(entry.uid.clone()) {
+            return Err(Error::DuplicateEntity(list));
+        }
         entries.push(entry);
     }
     if entries.is_empty() {
         return Err(Error::InvalidDocument("publication has no entries"));
+    }
+    if let Some(declared) = declared_count
+        && declared != entries.len()
+    {
+        return Err(Error::RecordCount {
+            declared,
+            actual: entries.len(),
+        });
     }
     Ok(Publication {
         entries,

@@ -10,6 +10,8 @@ Parse standard SDN and consolidated non-SDN XML. Retain source IDs, primary name
 
 Formats are described by [OFAC’s Sanctions List Service](https://ofac.treasury.gov/sanctions-list-service) and [standard XML schema](https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/XML.xsd). Tests use synthetic records.
 
+Parser limits bound bytes, nodes, depth, records, text, and names. Duplicate IDs, count mismatches, empty publications, DTDs, and malformed XML fail explicitly.
+
 ```rust
 use ofac_compliance::{parse_xml, List, ParseLimits};
 let xml = b"<sdnList><sdnEntry><uid>1</uid><lastName>Example</lastName><sdnType>Entity</sdnType></sdnEntry></sdnList>";

@@ -34,3 +34,41 @@ fn rejects_malformed_and_empty_publications() {
         assert!(parse_xml(List::Sdn, input.as_bytes(), &ParseLimits::default()).is_err());
     }
 }
+
+#[test]
+fn rejects_duplicate_ids_count_mismatches_and_resource_excesses() {
+    let xml = include_str!("fixtures/sdn.xml");
+    for invalid in [
+        xml.replace("<uid>200</uid>", "<uid>100</uid>"),
+        xml.replace(
+            "<Record_Count>4</Record_Count>",
+            "<Record_Count>5</Record_Count>",
+        ),
+    ] {
+        assert!(parse_xml(List::Sdn, invalid.as_bytes(), &ParseLimits::default()).is_err());
+    }
+    for limits in [
+        ParseLimits {
+            max_bytes: 10,
+            ..Default::default()
+        },
+        ParseLimits {
+            max_nodes: 5,
+            ..Default::default()
+        },
+        ParseLimits {
+            max_depth: 2,
+            ..Default::default()
+        },
+        ParseLimits {
+            max_entries: 1,
+            ..Default::default()
+        },
+        ParseLimits {
+            max_text_bytes: 2,
+            ..Default::default()
+        },
+    ] {
+        assert!(parse_xml(List::Sdn, xml.as_bytes(), &limits).is_err());
+    }
+}

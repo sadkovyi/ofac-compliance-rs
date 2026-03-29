@@ -1,3 +1,5 @@
+use crate::List;
+
 /// Errors returned by list loading, screening, and optional integrations.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -19,6 +21,17 @@ pub enum Error {
         /// The configured maximum.
         limit: usize,
     },
+    /// The publisher's declared record count disagrees with the document.
+    #[error("record count mismatch: declared {declared}, parsed {actual}")]
+    RecordCount {
+        /// Publisher count.
+        declared: usize,
+        /// Parsed count.
+        actual: usize,
+    },
+    /// Entity IDs must be unique within one list.
+    #[error("duplicate entity identifier in {0}")]
+    DuplicateEntity(List),
 }
 
 /// The library's result type.
