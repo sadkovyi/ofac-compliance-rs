@@ -41,18 +41,13 @@ impl Default for ParseLimits {
     }
 }
 
-/// Parsed source records and publication information.
-pub struct Publication {
-    /// Entries in source order.
+pub(crate) struct Parsed {
     pub entries: Vec<Entry>,
-    /// Publisher date, retained verbatim.
     pub published_date: Option<String>,
-    /// Publisher record count, if present.
     pub declared_count: Option<usize>,
 }
 
-/// Parse a complete standard OFAC XML document.
-pub fn parse_xml(list: List, bytes: &[u8], limits: &ParseLimits) -> Result<Publication> {
+pub(crate) fn parse(list: List, bytes: &[u8], limits: &ParseLimits) -> Result<Parsed> {
     limit(bytes.len(), limits.max_bytes, "document bytes")?;
     let xml = std::str::from_utf8(bytes).map_err(|_| Error::InvalidDocument("expected UTF-8"))?;
     // Reject even empty DTD declarations. External entities are never resolved.
@@ -124,7 +119,7 @@ pub fn parse_xml(list: List, bytes: &[u8], limits: &ParseLimits) -> Result<Publi
             actual: entries.len(),
         });
     }
-    Ok(Publication {
+    Ok(Parsed {
         entries,
         published_date,
         declared_count,

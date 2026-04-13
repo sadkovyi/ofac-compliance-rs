@@ -12,13 +12,12 @@ Formats are described by [OFAC’s Sanctions List Service](https://ofac.treasury
 
 Parser limits bound bytes, nodes, depth, records, text, and names. Duplicate IDs, count mismatches, empty publications, DTDs, and malformed XML fail explicitly.
 
-```rust
-use ofac_compliance::{parse_xml, List, ParseLimits};
-let xml = b"<sdnList><sdnEntry><uid>1</uid><lastName>Example</lastName><sdnType>Entity</sdnType></sdnEntry></sdnList>";
-let publication = parse_xml(List::Sdn, xml, &ParseLimits::default())?;
-assert_eq!(publication.entries[0].uid, "1");
-# Ok::<(), ofac_compliance::Error>(())
-```
+## Snapshots
+
+`Snapshot::from_xml` preserves the original bytes and publisher metadata with a
+content digest. Clones share immutable records. Acquisition and validation time
+are independent of the publisher date. `RequireFresh` rejects stale data;
+`AllowStale` marks it explicitly. Future timestamps fail with `ClockSkew`.
 
 ## Development
 

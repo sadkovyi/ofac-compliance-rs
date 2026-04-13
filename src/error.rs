@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::List;
 
 /// Errors returned by list loading, screening, and optional integrations.
@@ -32,6 +34,19 @@ pub enum Error {
     /// Entity IDs must be unique within one list.
     #[error("duplicate entity identifier in {0}")]
     DuplicateEntity(List),
+    /// The snapshot is older than the caller's policy permits.
+    #[error("{list} snapshot age {age:?} exceeds maximum {max_age:?}")]
+    StaleSnapshot {
+        /// Affected list.
+        list: List,
+        /// Time since successful acquisition or validation.
+        age: Duration,
+        /// Maximum permitted age.
+        max_age: Duration,
+    },
+    /// A supplied time precedes a recorded acquisition or validation time.
+    #[error("clock precedes snapshot validation time for {0}")]
+    ClockSkew(List),
 }
 
 /// The library's result type.
