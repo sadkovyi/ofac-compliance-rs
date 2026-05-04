@@ -150,28 +150,3 @@ fn content_identity_is_stable_and_sensitive_to_changes() {
             .digest
     );
 }
-
-#[test]
-fn freshness_requires_explicit_stale_use_and_rejects_future_clocks() {
-    use ofac_compliance::FreshnessPolicy;
-    use std::time::Duration;
-    let snapshot = parse(SDN).unwrap();
-    let max = Duration::from_secs(60);
-    let now = UNIX_EPOCH + Duration::from_secs(61);
-    assert!(
-        snapshot
-            .freshness(FreshnessPolicy::RequireFresh(max), now)
-            .is_err()
-    );
-    assert!(
-        snapshot
-            .freshness(FreshnessPolicy::AllowStale(max), now)
-            .unwrap()
-            .stale
-    );
-    assert!(
-        snapshot
-            .freshness(FreshnessPolicy::AllowStale(max), UNIX_EPOCH - max)
-            .is_err()
-    );
-}

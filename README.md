@@ -12,12 +12,38 @@ Formats are described by [OFAC’s Sanctions List Service](https://ofac.treasury
 
 Parser limits bound bytes, nodes, depth, records, text, and names. Duplicate IDs, count mismatches, empty publications, DTDs, and malformed XML fail explicitly.
 
-## Snapshots
+## Screening
 
-`Snapshot::from_xml` preserves the original bytes and publisher metadata with a
-content digest. Clones share immutable records. Acquisition and validation time
-are independent of the publisher date. `RequireFresh` rejects stale data;
-`AllowStale` marks it explicitly. Future timestamps fail with `ClockSkew`.
+```rust
+use std::time::{Duration, SystemTime};
+use ofac_compliance::{FreshnessPolicy, List, NameOptions, Screener, Snapshot};
+
+// Synthetic example. In an application, read a complete OFAC XML export.
+let xml = br#"<sdnList>
+  <sdnEntry>
+    <uid>100</uid>
+    <lastName>Example Trading Ltd</lastName>
+    <sdnType>Entity</sdnType>
+  </sdnEntry>
+</sdnList>"#;
+
+let acquired_at = SystemTime::now();
+let snapshot = Snapshot::from_xml(List::Sdn, xml, acquired_at)?;
+let screener = Screener::new(
+    [snapshot],
+    &[List::Sdn],
+    FreshnessPolicy::RequireFresh(Duration::from_secs(24 * 60 * 60)),
+)?;
+
+let report = screener.screen_name("EXAMPLE TRADING, LTD.", NameOptions::exact())?;
+assert_eq!(report.candidates[0].entry.uid, "100");
+assert!(!report.truncated());
+# Ok::<(), ofac_compliance::Error>(())
+```
+
+Exact matching uses NFKC, Unicode lowercase, and separator collapse. Diacritics and non-Latin scripts are retained. Required publications must be present; freshness is evaluated for every query. Results include the matched name, original source entity, age, and content identity.
+
+Weak aliases are included unless disabled. Results are deduplicated by entity, ranked deterministically, and unlimited unless `with_limit` is set; `total_candidates` and `truncated()` expose omissions. Queries are bounded to 4 KiB.
 
 ## Development
 

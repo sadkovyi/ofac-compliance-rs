@@ -34,6 +34,21 @@ pub enum Error {
     /// Entity IDs must be unique within one list.
     #[error("duplicate entity identifier in {0}")]
     DuplicateEntity(List),
+    /// A list was supplied more than once.
+    #[error("duplicate list: {0}")]
+    DuplicateList(List),
+    /// A required list was not supplied.
+    #[error("required list is missing: {0}")]
+    MissingList(List),
+    /// At least one required list must be specified.
+    #[error("at least one required list must be specified")]
+    EmptyCoverage,
+    /// The query is empty or contains no searchable information.
+    #[error("query contains no searchable characters")]
+    EmptyQuery,
+    /// A numeric threshold or other configuration is invalid.
+    #[error("invalid configuration: {0}")]
+    InvalidConfiguration(&'static str),
     /// The snapshot is older than the caller's policy permits.
     #[error("{list} snapshot age {age:?} exceeds maximum {max_age:?}")]
     StaleSnapshot {
