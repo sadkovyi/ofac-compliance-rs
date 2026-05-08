@@ -22,3 +22,9 @@ pub(crate) fn name(value: &str) -> String {
 pub(crate) fn searchable(value: &str) -> bool {
     value.chars().any(char::is_alphanumeric)
 }
+
+pub(crate) fn sorted_tokens(value: &str) -> String {
+    let mut tokens: Vec<_> = value.split_whitespace().collect();
+    tokens.sort_unstable();
+    tokens.join(" ")
+}

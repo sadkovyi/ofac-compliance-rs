@@ -98,6 +98,86 @@ fn weak_aliases_are_explainable_and_can_be_excluded() {
 }
 
 #[test]
+fn fuzzy_matching_handles_typos_and_token_order_with_explicit_evidence() {
+    let screener = screener();
+    let fuzzy = NameOptions::fuzzy(0.9).unwrap();
+    let typo = screener
+        .screen_name_at("Exampel Trading Ltd", fuzzy, UNIX_EPOCH)
+        .unwrap();
+    assert_eq!(typo.candidates[0].entry.uid, "200");
+    assert!(
+        matches!(typo.candidates[0].evidence, Evidence::Name { method: MatchMethod::JaroWinkler, score, .. } if (0.9..1.0).contains(&score))
+    );
+    let reordered = screener
+        .screen_name_at("Example José", NameOptions::fuzzy(1.0).unwrap(), UNIX_EPOCH)
+        .unwrap();
+    assert!(matches!(
+        reordered.candidates[0].evidence,
+        Evidence::Name {
+            method: MatchMethod::TokenOrder,
+            score: 1.0,
+            ..
+        }
+    ));
+    assert_eq!(
+        screener
+            .screen_name_at(
+                "Example José",
+                NameOptions::fuzzy(1.0).unwrap().with_token_order(false),
+                UNIX_EPOCH
+            )
+            .unwrap()
+            .total_candidates,
+        0
+    );
+}
+
+#[test]
+fn no_match_and_deceptive_near_match_respect_the_chosen_mode() {
+    let screener = screener();
+    for query in ["Unrelated Oceanic Workshops", "Exampel Trading Ltd"] {
+        assert!(
+            screener
+                .screen_name_at(query, NameOptions::exact(), UNIX_EPOCH)
+                .unwrap()
+                .candidates
+                .is_empty()
+        );
+    }
+    assert!(
+        screener
+            .screen_name_at(
+                "Exampel Trading Ltd",
+                NameOptions::fuzzy(1.0).unwrap(),
+                UNIX_EPOCH
+            )
+            .unwrap()
+            .candidates
+            .is_empty()
+    );
+}
+
+#[test]
+fn rejects_invalid_thresholds_and_unusable_queries() {
+    for threshold in [f64::NAN, f64::INFINITY, -1.0, 0.0, 1.01] {
+        assert!(NameOptions::fuzzy(threshold).is_err());
+    }
+    let screener = screener();
+    for query in ["", " \n\t", "---", "\u{301}"] {
+        assert!(
+            screener
+                .screen_name_at(query, NameOptions::exact(), UNIX_EPOCH)
+                .is_err()
+        );
+    }
+    assert!(
+        screener
+            .screen_name_at(&"a".repeat(4097), NameOptions::exact(), UNIX_EPOCH)
+            .is_err()
+    );
+}
+
+#[test]
 fn limits_are_applied_after_deduplication_and_total_count_is_reported() {
     let screener = screener();
     let report = screener
@@ -186,4 +266,29 @@ fn stale_opt_in_and_clock_skew_are_explicit() {
         ),
         Err(Error::ClockSkew(List::Sdn))
     ));
+}
+
+#[test]
+fn construction_order_does_not_change_identity_or_results() {
+    let a = screener();
+    let b = Screener::new(
+        [cons(), sdn()],
+        &[List::Consolidated, List::Sdn],
+        FreshnessPolicy::RequireFresh(MAX_AGE),
+    )
+    .unwrap();
+    assert_eq!(a.snapshot_id(), b.snapshot_id());
+    let ids = |s: &Screener| {
+        s.screen_name_at(
+            "Example Trading Ltd",
+            NameOptions::fuzzy(0.8).unwrap(),
+            UNIX_EPOCH,
+        )
+        .unwrap()
+        .candidates
+        .into_iter()
+        .map(|c| (c.list, c.entry.uid.clone()))
+        .collect::<Vec<_>>()
+    };
+    assert_eq!(ids(&a), ids(&b));
 }

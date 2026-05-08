@@ -16,11 +16,17 @@ const MAX_QUERY_BYTES: usize = 4096;
 pub enum MatchMethod {
     /// Equality after documented Unicode and punctuation normalization.
     NormalizedExact,
+    /// Jaro-Winkler similarity of normalized names.
+    JaroWinkler,
+    /// Jaro-Winkler similarity after sorting normalized name tokens.
+    TokenOrder,
 }
 
 /// Per-query name matching policy. Exact matching is the default.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NameOptions {
+    threshold: Option<f64>,
+    token_order: bool,
     include_weak: bool,
     limit: Option<NonZeroUsize>,
 }
@@ -35,9 +41,27 @@ impl NameOptions {
     /// Search the normalized exact-name index. Returns all candidates.
     pub const fn exact() -> Self {
         Self {
+            threshold: None,
+            token_order: false,
             include_weak: true,
             limit: None,
         }
+    }
+
+    /// Search all indexed names using Jaro-Winkler. The threshold must be finite
+    /// and in `(0, 1]`. It is a similarity threshold, not a probability.
+    /// Token-order comparison is enabled; no transliteration is performed.
+    pub fn fuzzy(threshold: f64) -> Result<Self> {
+        if !threshold.is_finite() || threshold <= 0.0 || threshold > 1.0 {
+            return Err(Error::InvalidConfiguration(
+                "similarity threshold must be in (0, 1]",
+            ));
+        }
+        Ok(Self {
+            threshold: Some(threshold),
+            token_order: true,
+            ..Self::exact()
+        })
     }
 
     /// Limit returned entities after scoring and ranking. Reports still contain
@@ -51,6 +75,18 @@ impl NameOptions {
     pub const fn with_weak_aliases(mut self, include: bool) -> Self {
         self.include_weak = include;
         self
+    }
+
+    /// Enable comparison of sorted tokens for fuzzy searches. Exact searches
+    /// always preserve token order.
+    pub const fn with_token_order(mut self, enabled: bool) -> Self {
+        self.token_order = enabled;
+        self
+    }
+
+    /// Configured fuzzy threshold, or `None` for exact matching.
+    pub const fn threshold(self) -> Option<f64> {
+        self.threshold
     }
 }
 
@@ -129,6 +165,8 @@ struct Location {
 struct IndexedName {
     location: Location,
     alias: Option<usize>,
+    normalized: String,
+    sorted: String,
     weak: bool,
 }
 
@@ -196,6 +234,7 @@ impl Screener {
                 );
                 for (alias, value, weak) in entry_names {
                     let normalized = normalize::name(value);
+                    let sorted = normalize::sorted_tokens(&normalized);
                     exact
                         .entry(normalized.clone())
                         .or_default()
@@ -203,6 +242,8 @@ impl Screener {
                     names.push(IndexedName {
                         location,
                         alias,
+                        normalized,
+                        sorted,
                         weak,
                     });
                 }
@@ -257,7 +298,35 @@ impl Screener {
         }
         let sources = self.statuses(now)?;
         let mut best: BTreeMap<Location, (usize, f64, MatchMethod)> = BTreeMap::new();
-        if let Some(indices) = self.exact.get(&query) {
+        if let Some(threshold) = options.threshold {
+            let sorted = normalize::sorted_tokens(&query);
+            for (index, name) in self.names.iter().enumerate() {
+                if name.weak && !options.include_weak {
+                    continue;
+                }
+                let (mut score, mut method) = if name.normalized == query {
+                    (1.0, MatchMethod::NormalizedExact)
+                } else {
+                    (
+                        strsim::jaro_winkler(&query, &name.normalized),
+                        MatchMethod::JaroWinkler,
+                    )
+                };
+                if options.token_order && score < 1.0 {
+                    let reordered = strsim::jaro_winkler(&sorted, &name.sorted);
+                    if reordered > score {
+                        score = reordered;
+                        method = MatchMethod::TokenOrder;
+                    }
+                }
+                if score >= threshold {
+                    let item = best.entry(name.location).or_insert((index, score, method));
+                    if score > item.1 {
+                        *item = (index, score, method);
+                    }
+                }
+            }
+        } else if let Some(indices) = self.exact.get(&query) {
             for &index in indices {
                 let name = &self.names[index];
                 if name.weak && !options.include_weak {

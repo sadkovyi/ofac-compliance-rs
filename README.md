@@ -45,6 +45,8 @@ Exact matching uses NFKC, Unicode lowercase, and separator collapse. Diacritics 
 
 Weak aliases are included unless disabled. Results are deduplicated by entity, ranked deterministically, and unlimited unless `with_limit` is set; `total_candidates` and `truncated()` expose omissions. Queries are bounded to 4 KiB.
 
+`NameOptions::fuzzy(threshold)?` evaluates Jaro-Winkler across all names with optional sorted-token comparison. Thresholds in `(0, 1]` are similarity scores, not probabilities or OFAC search scores. Calibrate them on labeled examples.
+
 ## Development
 
 Run `cargo fmt --all -- --check`, `cargo test --all-features`, and `cargo clippy --all-targets --all-features -- -D warnings`. Ordinary tests run offline after fetching dependencies. Screening returns candidates for review; it does not establish a legal determination.
