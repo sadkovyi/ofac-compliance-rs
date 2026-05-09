@@ -178,6 +178,48 @@ fn rejects_invalid_thresholds_and_unusable_queries() {
 }
 
 #[test]
+fn identifier_matching_preserves_case_punctuation_and_type() {
+    let screener = screener();
+    assert_eq!(
+        screener
+            .lookup_identifier_at(" AB-001 ", None, UNIX_EPOCH)
+            .unwrap()
+            .total_candidates,
+        2
+    );
+    let report = screener
+        .lookup_identifier_at("AB-001", Some("PASSPORT"), UNIX_EPOCH)
+        .unwrap();
+    assert_eq!(report.total_candidates, 1);
+    assert_eq!(report.candidates[0].list, List::Sdn);
+    assert!(matches!(
+        report.candidates[0].evidence,
+        Evidence::Identifier { .. }
+    ));
+    for query in ["ab-001", "AB001", "1exampleabc"] {
+        assert_eq!(
+            screener
+                .lookup_identifier_at(query, None, UNIX_EPOCH)
+                .unwrap()
+                .total_candidates,
+            0
+        );
+    }
+    assert_eq!(
+        screener
+            .lookup_identifier_at("1ExampleAbC", None, UNIX_EPOCH)
+            .unwrap()
+            .total_candidates,
+        1
+    );
+    assert!(
+        screener
+            .lookup_identifier_at("AB-001", Some("!!!"), UNIX_EPOCH)
+            .is_err()
+    );
+}
+
+#[test]
 fn limits_are_applied_after_deduplication_and_total_count_is_reported() {
     let screener = screener();
     let report = screener
@@ -241,6 +283,10 @@ fn freshness_is_checked_on_every_query_including_no_match() {
     let stale = at_limit + Duration::from_nanos(1);
     assert!(matches!(
         screener.screen_name_at("Nobody", NameOptions::exact(), stale),
+        Err(Error::StaleSnapshot { .. })
+    ));
+    assert!(matches!(
+        screener.lookup_identifier_at("missing", None, stale),
         Err(Error::StaleSnapshot { .. })
     ));
 }

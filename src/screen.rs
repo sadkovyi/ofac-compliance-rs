@@ -5,8 +5,8 @@ use std::{
 };
 
 use crate::{
-    ALGORITHM_VERSION, Entry, Error, Freshness, FreshnessPolicy, List, Result, Snapshot,
-    SnapshotMetadata, normalize, snapshot::digest,
+    ALGORITHM_VERSION, Entry, Error, Freshness, FreshnessPolicy, Identifier, List, Result,
+    Snapshot, SnapshotMetadata, normalize, snapshot::digest,
 };
 
 const MAX_QUERY_BYTES: usize = 4096;
@@ -105,6 +105,11 @@ pub enum Evidence<'a> {
         /// Which comparison produced this score.
         method: MatchMethod,
     },
+    /// A case-sensitive identifier match after trimming outer whitespace.
+    Identifier {
+        /// The original identifier, including type and issuing country.
+        identifier: &'a Identifier,
+    },
 }
 
 /// One source entity that met the query's matching rules.
@@ -142,6 +147,8 @@ pub struct Report<'a> {
     pub sources: Vec<SourceStatus<'a>>,
     /// Name policy for name searches; absent for identifier searches.
     pub name_options: Option<NameOptions>,
+    /// Normalized identifier type filter, when specified for identifier lookup.
+    pub identifier_kind: Option<String>,
     /// Candidates, ordered by descending score, then list and entity ID.
     pub candidates: Vec<Candidate<'a>>,
     /// Qualifying entity count before applying the result limit.
@@ -179,6 +186,7 @@ pub struct Screener {
     snapshot_id: String,
     names: Vec<IndexedName>,
     exact: HashMap<String, Vec<usize>>,
+    identifiers: HashMap<String, Vec<(Location, usize)>>,
 }
 
 impl Screener {
@@ -215,6 +223,7 @@ impl Screener {
         let mut identity = String::from(ALGORITHM_VERSION);
         let mut names = Vec::new();
         let mut exact: HashMap<String, Vec<usize>> = HashMap::new();
+        let mut identifiers: HashMap<String, Vec<(Location, usize)>> = HashMap::new();
         for (s, snapshot) in snapshots.iter().enumerate() {
             identity.push_str(&format!(
                 "\n{}:{}",
@@ -247,6 +256,12 @@ impl Screener {
                         weak,
                     });
                 }
+                for (i, id) in entry.identifiers.iter().enumerate() {
+                    identifiers
+                        .entry(id.number.trim().to_owned())
+                        .or_default()
+                        .push((location, i));
+                }
             }
         }
         Ok(Self {
@@ -255,6 +270,7 @@ impl Screener {
             snapshot_id: digest(identity.as_bytes()),
             names,
             exact,
+            identifiers,
         })
     }
 
@@ -373,8 +389,80 @@ impl Screener {
             freshness_policy: self.policy,
             sources,
             name_options: Some(options),
+            identifier_kind: None,
             candidates,
             total_candidates,
+        })
+    }
+
+    /// Exact identifier lookup at the current time. Identifier values are
+    /// case-sensitive and punctuation-sensitive, with outer whitespace trimmed.
+    /// An optional type is compared using name normalization.
+    pub fn lookup_identifier(&self, value: &str, kind: Option<&str>) -> Result<Report<'_>> {
+        self.lookup_identifier_at(value, kind, SystemTime::now())
+    }
+
+    /// Exact identifier lookup with an explicit freshness-evaluation timestamp.
+    pub fn lookup_identifier_at(
+        &self,
+        value: &str,
+        kind: Option<&str>,
+        now: SystemTime,
+    ) -> Result<Report<'_>> {
+        check_query(value)?;
+        let value = value.trim();
+        if !normalize::searchable(value) {
+            return Err(Error::EmptyQuery);
+        }
+        let kind = kind
+            .map(|kind| {
+                check_query(kind)?;
+                let kind = normalize::name(kind);
+                if !normalize::searchable(&kind) {
+                    return Err(Error::EmptyQuery);
+                }
+                Ok(kind)
+            })
+            .transpose()?;
+        let sources = self.statuses(now)?;
+        let mut best = BTreeMap::new();
+        if let Some(records) = self.identifiers.get(value) {
+            for &(location, index) in records {
+                let id = &self.entry(location).identifiers[index];
+                if kind
+                    .as_ref()
+                    .is_some_and(|kind| normalize::name(&id.kind) != *kind)
+                {
+                    continue;
+                }
+                best.entry(location).or_insert(index);
+            }
+        }
+        let mut records: Vec<_> = best.into_iter().collect();
+        records.sort_by(|(a, _), (b, _)| self.key(*a).cmp(&self.key(*b)));
+        let candidates: Vec<_> = records
+            .into_iter()
+            .map(|(location, index)| {
+                let entry = self.entry(location);
+                Candidate {
+                    list: self.snapshots[location.snapshot].metadata.list,
+                    entry,
+                    evidence: Evidence::Identifier {
+                        identifier: &entry.identifiers[index],
+                    },
+                }
+            })
+            .collect();
+        Ok(Report {
+            snapshot_id: &self.snapshot_id,
+            algorithm_version: ALGORITHM_VERSION,
+            screened_at: now,
+            freshness_policy: self.policy,
+            sources,
+            name_options: None,
+            identifier_kind: kind,
+            total_candidates: candidates.len(),
+            candidates,
         })
     }
 

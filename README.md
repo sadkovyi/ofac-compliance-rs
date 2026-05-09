@@ -47,6 +47,8 @@ Weak aliases are included unless disabled. Results are deduplicated by entity, r
 
 `NameOptions::fuzzy(threshold)?` evaluates Jaro-Winkler across all names with optional sorted-token comparison. Thresholds in `(0, 1]` are similarity scores, not probabilities or OFAC search scores. Calibrate them on labeled examples.
 
+`lookup_identifier` preserves identifier case and punctuation and accepts an optional normalized type filter. Dates and addresses remain review evidence rather than automatic exclusion rules.
+
 ## Development
 
 Run `cargo fmt --all -- --check`, `cargo test --all-features`, and `cargo clippy --all-targets --all-features -- -D warnings`. Ordinary tests run offline after fetching dependencies. Screening returns candidates for review; it does not establish a legal determination.
