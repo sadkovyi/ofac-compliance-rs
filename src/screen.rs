@@ -395,6 +395,24 @@ impl Screener {
         })
     }
 
+    /// Screen a sequence of names using one freshness-evaluation timestamp.
+    /// An invalid query fails the batch; no partial success is returned.
+    pub fn screen_batch_at<I, S>(
+        &self,
+        queries: I,
+        options: NameOptions,
+        now: SystemTime,
+    ) -> Result<Vec<Report<'_>>>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        queries
+            .into_iter()
+            .map(|query| self.screen_name_at(query.as_ref(), options, now))
+            .collect()
+    }
+
     /// Exact identifier lookup at the current time. Identifier values are
     /// case-sensitive and punctuation-sensitive, with outer whitespace trimmed.
     /// An optional type is compared using name normalization.

@@ -338,3 +338,40 @@ fn construction_order_does_not_change_identity_or_results() {
     };
     assert_eq!(ids(&a), ids(&b));
 }
+
+#[test]
+fn batch_has_single_time_and_fails_on_invalid_input() {
+    let screener = screener();
+    let queries = ["José Example", "示例贸易"];
+    let reports = screener
+        .screen_batch_at(queries, NameOptions::exact(), UNIX_EPOCH)
+        .unwrap();
+    assert_eq!(reports.len(), 2);
+    assert!(reports.iter().all(|r| r.screened_at == UNIX_EPOCH));
+    assert!(
+        screener
+            .screen_batch_at(["José Example", ""], NameOptions::exact(), UNIX_EPOCH)
+            .is_err()
+    );
+}
+
+#[test]
+fn immutable_screener_supports_concurrent_queries() {
+    fn assert_send_sync<T: Send + Sync>() {}
+    assert_send_sync::<Screener>();
+    assert_send_sync::<Snapshot>();
+    let screener = screener();
+    std::thread::scope(|scope| {
+        for _ in 0..8 {
+            scope.spawn(|| {
+                assert_eq!(
+                    screener
+                        .screen_name_at("Example Trading Ltd", NameOptions::exact(), UNIX_EPOCH)
+                        .unwrap()
+                        .total_candidates,
+                    3
+                )
+            });
+        }
+    });
+}

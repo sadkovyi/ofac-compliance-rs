@@ -49,6 +49,8 @@ Weak aliases are included unless disabled. Results are deduplicated by entity, r
 
 `lookup_identifier` preserves identifier case and punctuation and accepts an optional normalized type filter. Dates and addresses remain review evidence rather than automatic exclusion rules.
 
+`screen_batch_at` uses one timestamp and fails the batch on invalid input. A screener can be shared between threads without query-side locks.
+
 ## Development
 
 Run `cargo fmt --all -- --check`, `cargo test --all-features`, and `cargo clippy --all-targets --all-features -- -D warnings`. Ordinary tests run offline after fetching dependencies. Screening returns candidates for review; it does not establish a legal determination.
