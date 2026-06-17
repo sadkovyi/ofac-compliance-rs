@@ -2,6 +2,7 @@ use std::fmt;
 
 /// An OFAC publication. IDs are scoped to this value.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum List {
     /// Specially Designated Nationals and Blocked Persons.
@@ -40,6 +41,7 @@ impl fmt::Display for List {
 
 /// A primary listing, with original source strings retained.
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Entry {
     /// OFAC entity identifier, unique within the source list.
     pub uid: String,
@@ -73,6 +75,7 @@ pub struct Entry {
 
 /// An alternative name with its source quality and type.
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Alias {
     /// Source alias ID, when present.
     pub uid: Option<String>,
@@ -99,6 +102,7 @@ impl Alias {
 
 /// An identifier as published, without inferred validity or expiration rules.
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Identifier {
     /// Source identifier record ID.
     pub uid: Option<String>,
@@ -116,6 +120,7 @@ pub struct Identifier {
 
 /// A postal address, retaining the source's free-form components.
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Address {
     /// Source address record ID.
     pub uid: Option<String>,
@@ -133,6 +138,7 @@ pub struct Address {
 
 /// A source date of birth, which may be a range or an incomplete date.
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct DateOfBirth {
     /// Source record ID.
     pub uid: Option<String>,
@@ -144,6 +150,7 @@ pub struct DateOfBirth {
 
 /// A nationality or citizenship record.
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Country {
     /// Source record ID.
     pub uid: Option<String>,
@@ -155,6 +162,7 @@ pub struct Country {
 
 /// An unmodeled XML element. The complete original XML is also kept by the snapshot.
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct SourceField {
     /// Element local name.
     pub name: String,

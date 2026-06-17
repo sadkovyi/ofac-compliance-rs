@@ -51,6 +51,8 @@ Weak aliases are included unless disabled. Results are deduplicated by entity, r
 
 `screen_batch_at` uses one timestamp and fails the batch on invalid input. A screener can be shared between threads without query-side locks.
 
+Enable `serde` to serialize records, provenance, policy, and reports. Snapshots cannot be deserialized around their validation boundary.
+
 ## Development
 
 Run `cargo fmt --all -- --check`, `cargo test --all-features`, and `cargo clippy --all-targets --all-features -- -D warnings`. Ordinary tests run offline after fetching dependencies. Screening returns candidates for review; it does not establish a legal determination.

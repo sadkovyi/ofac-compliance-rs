@@ -13,6 +13,7 @@ const MAX_QUERY_BYTES: usize = 4096;
 
 /// The operation that produced a name candidate.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub enum MatchMethod {
     /// Equality after documented Unicode and punctuation normalization.
     NormalizedExact,
@@ -24,6 +25,7 @@ pub enum MatchMethod {
 
 /// Per-query name matching policy. Exact matching is the default.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct NameOptions {
     threshold: Option<f64>,
     token_order: bool,
@@ -92,6 +94,7 @@ impl NameOptions {
 
 /// Evidence for one candidate. The original source entry remains available.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[non_exhaustive]
 pub enum Evidence<'a> {
     /// A primary name or an alias matched the query.
@@ -114,6 +117,7 @@ pub enum Evidence<'a> {
 
 /// One source entity that met the query's matching rules.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Candidate<'a> {
     /// Publication containing the entity.
     pub list: List,
@@ -125,6 +129,7 @@ pub struct Candidate<'a> {
 
 /// Provenance and age for a screened publication.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct SourceStatus<'a> {
     /// The exact source used.
     pub metadata: &'a SnapshotMetadata,
@@ -134,6 +139,7 @@ pub struct SourceStatus<'a> {
 
 /// Screening candidates with complete coverage and truncation information.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Report<'a> {
     /// SHA3-256 identity of the selected source contents and algorithm version.
     pub snapshot_id: &'a str,

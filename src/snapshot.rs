@@ -9,6 +9,7 @@ use crate::{Entry, Error, List, ParseLimits, Result};
 
 /// Policy for accepting the age of a successfully validated source.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub enum FreshnessPolicy {
     /// Return an error when any required snapshot is older than this age.
     RequireFresh(Duration),
@@ -18,6 +19,7 @@ pub enum FreshnessPolicy {
 
 /// Age and freshness evaluated at the time of screening or cache loading.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Freshness {
     /// Elapsed time since successful retrieval or conditional validation.
     pub age: Duration,
@@ -27,6 +29,7 @@ pub struct Freshness {
 
 /// Provenance of a complete, successfully parsed source publication.
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct SnapshotMetadata {
     /// Source publication.
     pub list: List,
