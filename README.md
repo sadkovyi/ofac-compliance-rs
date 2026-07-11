@@ -53,6 +53,8 @@ Weak aliases are included unless disabled. Results are deduplicated by entity, r
 
 Enable `serde` to serialize records, provenance, policy, and reports. Snapshots cannot be deserialized around their validation boundary.
 
+`Snapshot::from_reader` and its configurable-limit counterpart support bounded file and reader imports. Caller-supplied acquisition timestamps must describe the bytes, not the time an old file was opened.
+
 ## Development
 
 Run `cargo fmt --all -- --check`, `cargo test --all-features`, and `cargo clippy --all-targets --all-features -- -D warnings`. Ordinary tests run offline after fetching dependencies. Screening returns candidates for review; it does not establish a legal determination.

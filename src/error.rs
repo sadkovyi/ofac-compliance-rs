@@ -62,6 +62,9 @@ pub enum Error {
     /// A supplied time precedes a recorded acquisition or validation time.
     #[error("clock precedes snapshot validation time for {0}")]
     ClockSkew(List),
+    /// An underlying read or write failed.
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 /// The library's result type.

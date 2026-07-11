@@ -1,4 +1,5 @@
 use std::{
+    io::Read,
     sync::Arc,
     time::{Duration, SystemTime},
 };
@@ -56,6 +57,26 @@ pub struct Snapshot {
 }
 
 impl Snapshot {
+    /// Read at most the default byte limit plus one byte and parse the complete
+    /// publication. The extra byte detects oversized input without reading it all.
+    pub fn from_reader(list: List, reader: impl Read, retrieved_at: SystemTime) -> Result<Self> {
+        Self::from_reader_with_limits(list, reader, retrieved_at, &ParseLimits::default())
+    }
+
+    /// Bounded reader import with explicit parser limits.
+    pub fn from_reader_with_limits(
+        list: List,
+        reader: impl Read,
+        retrieved_at: SystemTime,
+        limits: &ParseLimits,
+    ) -> Result<Self> {
+        let mut bytes = Vec::new();
+        reader
+            .take((limits.max_bytes as u64).saturating_add(1))
+            .read_to_end(&mut bytes)?;
+        Self::from_xml_with_limits(list, &bytes, retrieved_at, limits)
+    }
+
     /// Parse standard OFAC XML with default resource limits.
     ///
     /// The list identity is supplied by the caller because both exports use the

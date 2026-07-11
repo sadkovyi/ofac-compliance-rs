@@ -150,3 +150,34 @@ fn content_identity_is_stable_and_sensitive_to_changes() {
             .digest
     );
 }
+
+#[test]
+fn reader_import_stops_at_the_limit_and_propagates_io_errors() {
+    use std::io::{self, Read};
+    let limits = ParseLimits {
+        max_bytes: 32,
+        ..Default::default()
+    };
+    let mut input = io::repeat(b'a');
+    assert!(matches!(
+        Snapshot::from_reader_with_limits(List::Sdn, &mut input, UNIX_EPOCH, &limits),
+        Err(Error::LimitExceeded { .. })
+    ));
+    struct Broken;
+    impl Read for Broken {
+        fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
+            Err(io::Error::other("test read failure"))
+        }
+    }
+    assert!(matches!(
+        Snapshot::from_reader(List::Sdn, Broken, UNIX_EPOCH),
+        Err(Error::Io(_))
+    ));
+    assert_eq!(
+        Snapshot::from_reader(List::Sdn, SDN.as_bytes(), UNIX_EPOCH)
+            .unwrap()
+            .entries()
+            .len(),
+        4
+    );
+}
