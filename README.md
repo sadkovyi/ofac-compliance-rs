@@ -55,6 +55,12 @@ Enable `serde` to serialize records, provenance, policy, and reports. Snapshots 
 
 `Snapshot::from_reader` and its configurable-limit counterpart support bounded file and reader imports. Caller-supplied acquisition timestamps must describe the bytes, not the time an old file was opened.
 
+## Acquisition
+
+The optional `http` feature adds a blocking HTTPS client with request deadlines, redirect limits, and bounded bodies. No network activity starts automatically. Async applications should use a blocking pool for acquisition.
+
+`HttpClient::download(list)` returns a snapshot only after complete validation.
+
 ## Development
 
 Run `cargo fmt --all -- --check`, `cargo test --all-features`, and `cargo clippy --all-targets --all-features -- -D warnings`. Ordinary tests run offline after fetching dependencies. Screening returns candidates for review; it does not establish a legal determination.

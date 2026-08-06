@@ -65,6 +65,14 @@ pub enum Error {
     /// An underlying read or write failed.
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
+    /// A network request failed. URLs and headers are deliberately omitted.
+    #[cfg(feature = "http")]
+    #[error("HTTP transport failed")]
+    Transport,
+    /// The server returned an unsuccessful status code.
+    #[cfg(feature = "http")]
+    #[error("HTTP request failed with status {0}")]
+    HttpStatus(u16),
 }
 
 /// The library's result type.

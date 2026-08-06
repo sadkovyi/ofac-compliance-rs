@@ -17,3 +17,6 @@ pub use screen::{Candidate, Evidence, MatchMethod, NameOptions, Report, Screener
 
 /// Version of normalization, scoring, and ranking semantics.
 pub const ALGORITHM_VERSION: &str = "ofac-compliance/1";
+
+#[cfg(feature = "http")]
+pub mod http;

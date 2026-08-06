@@ -46,6 +46,10 @@ pub struct SnapshotMetadata {
     pub digest: String,
     /// Publisher-declared record count, when present.
     pub declared_count: Option<usize>,
+    /// ETag retained for conditional HTTP refreshes.
+    pub etag: Option<String>,
+    /// Last-Modified retained for conditional HTTP refreshes.
+    pub last_modified: Option<String>,
 }
 
 /// An immutable, validated list. Clones share the entries and original bytes.
@@ -102,6 +106,8 @@ impl Snapshot {
                 published_date: parsed.published_date,
                 digest: digest(bytes),
                 declared_count: parsed.declared_count,
+                etag: None,
+                last_modified: None,
             },
             entries: parsed.entries.into(),
             raw: bytes.into(),
