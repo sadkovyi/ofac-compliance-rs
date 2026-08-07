@@ -62,14 +62,22 @@ impl HttpClient {
         Ok(Self { agent, options })
     }
 
-    /// Download and validate a complete publication. No automatic retries occur.
-    pub fn download(&self, list: List) -> Result<Snapshot> {
-        self.download_using(list, SystemTime::now(), || {
-            let request = self
+    /// Fetch and validate a complete publication. A previous snapshot enables
+    /// conditional requests when its provenance and validators match this list.
+    /// On any failure, the borrowed previous snapshot remains untouched.
+    pub fn refresh(&self, list: List, previous: Option<&Snapshot>) -> Result<Snapshot> {
+        self.refresh_using(list, previous, SystemTime::now(), |etag, modified| {
+            let mut request = self
                 .agent
                 .get(list.url())
                 .set("Accept", "application/xml")
                 .set("Accept-Encoding", "identity");
+            if let Some(etag) = etag {
+                request = request.set("If-None-Match", etag);
+            }
+            if let Some(modified) = modified {
+                request = request.set("If-Modified-Since", modified);
+            }
             let response = match request.call() {
                 Ok(response) | Err(ureq::Error::Status(_, response)) => response,
                 Err(ureq::Error::Transport(_)) => return Err(Error::Transport),
@@ -95,13 +103,39 @@ impl HttpClient {
         })
     }
 
-    fn download_using(
+    fn refresh_using(
         &self,
         list: List,
+        previous: Option<&Snapshot>,
         now: SystemTime,
-        fetch: impl FnOnce() -> Result<Response>,
+        fetch: impl FnOnce(Option<&str>, Option<&str>) -> Result<Response>,
     ) -> Result<Snapshot> {
-        let response = fetch()?;
+        if previous.is_some_and(|s| s.metadata.list != list) {
+            return Err(Error::InvalidConfiguration(
+                "previous snapshot is for another list",
+            ));
+        }
+        if previous.is_some_and(|s| s.metadata.validated_at > now) {
+            return Err(Error::ClockSkew(list));
+        }
+        let conditional = previous.filter(|s| s.metadata.source_url.as_deref() == Some(list.url()));
+        let etag = conditional.and_then(|s| s.metadata.etag.as_deref());
+        let modified = conditional.and_then(|s| s.metadata.last_modified.as_deref());
+        let response = fetch(etag, modified)?;
+        if response.status == 304 {
+            let mut snapshot = conditional
+                .filter(|_| etag.is_some() || modified.is_some())
+                .ok_or(Error::UnexpectedNotModified)?
+                .clone();
+            snapshot.metadata.validated_at = now;
+            if response.etag.is_some() {
+                snapshot.metadata.etag = response.etag;
+            }
+            if response.last_modified.is_some() {
+                snapshot.metadata.last_modified = response.last_modified;
+            }
+            return Ok(snapshot);
+        }
         if response.status == 200 {
             let max_bytes = self.options.parse_limits.max_bytes;
             if response
@@ -169,7 +203,7 @@ mod tests {
     fn downloads_only_complete_valid_publications() {
         let client = HttpClient::new(HttpOptions::default()).unwrap();
         let snapshot = client
-            .download_using(List::Sdn, UNIX_EPOCH, || Ok(response(200, XML)))
+            .refresh_using(List::Sdn, None, UNIX_EPOCH, |_, _| Ok(response(200, XML)))
             .unwrap();
         assert_eq!(snapshot.entries().len(), 4);
         assert_eq!(
@@ -179,7 +213,9 @@ mod tests {
         for status in [204, 206, 304, 404, 503] {
             assert!(
                 client
-                    .download_using(List::Sdn, UNIX_EPOCH, || Ok(response(status, XML)))
+                    .refresh_using(List::Sdn, None, UNIX_EPOCH, |_, _| Ok(response(
+                        status, XML
+                    )))
                     .is_err()
             );
         }
@@ -194,11 +230,39 @@ mod tests {
             ..HttpOptions::default()
         })
         .unwrap();
-        let result = client.download_using(List::Sdn, UNIX_EPOCH, || {
+        let result = client.refresh_using(List::Sdn, None, UNIX_EPOCH, |_, _| {
             let mut r = response(200, XML);
             r.content_length = None;
             Ok(r)
         });
         assert!(matches!(result, Err(Error::LimitExceeded { .. })));
+    }
+
+    #[test]
+    fn conditional_validation_retains_original_bytes_and_acquisition_time() {
+        let client = HttpClient::new(HttpOptions::default()).unwrap();
+        let original = client
+            .refresh_using(List::Sdn, None, UNIX_EPOCH, |_, _| Ok(response(200, XML)))
+            .unwrap();
+        let now = UNIX_EPOCH + Duration::from_secs(60);
+        let refreshed = client
+            .refresh_using(List::Sdn, Some(&original), now, |etag, _| {
+                assert_eq!(etag, Some("\"v1\""));
+                Ok(response(304, b""))
+            })
+            .unwrap();
+        assert_eq!(refreshed.source_bytes(), XML);
+        assert_eq!(refreshed.metadata.retrieved_at, UNIX_EPOCH);
+        assert_eq!(refreshed.metadata.validated_at, now);
+        assert_eq!(original.metadata.validated_at, UNIX_EPOCH);
+        assert!(
+            client
+                .refresh_using(List::Sdn, Some(&original), now, |_, _| Ok(response(
+                    200,
+                    b"<broken>"
+                )))
+                .is_err()
+        );
+        assert_eq!(original.source_bytes(), XML);
     }
 }

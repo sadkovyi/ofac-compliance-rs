@@ -73,6 +73,10 @@ pub enum Error {
     #[cfg(feature = "http")]
     #[error("HTTP request failed with status {0}")]
     HttpStatus(u16),
+    /// A conditional response cannot be paired with a previous snapshot.
+    #[cfg(feature = "http")]
+    #[error("received HTTP 304 without a matching previous snapshot")]
+    UnexpectedNotModified,
 }
 
 /// The library's result type.

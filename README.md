@@ -59,7 +59,7 @@ Enable `serde` to serialize records, provenance, policy, and reports. Snapshots 
 
 The optional `http` feature adds a blocking HTTPS client with request deadlines, redirect limits, and bounded bodies. No network activity starts automatically. Async applications should use a blocking pool for acquisition.
 
-`HttpClient::download(list)` returns a snapshot only after complete validation.
+`HttpClient::refresh(list, previous)` uses matching source validators when available. A valid 304 advances validation time without replacing bytes or retrieval time. Failure leaves the old snapshot untouched.
 
 ## Development
 
