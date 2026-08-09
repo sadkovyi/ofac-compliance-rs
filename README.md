@@ -61,6 +61,8 @@ The optional `http` feature adds a blocking HTTPS client with request deadlines,
 
 `HttpClient::refresh(list, previous)` uses matching source validators when available. A valid 304 advances validation time without replacing bytes or retrieval time. Failure leaves the old snapshot untouched.
 
+Transient statuses have bounded retries. Numeric Retry-After values are respected within the delay limit; date-based or longer delays are returned to the caller. Transport and parse failures are not retried.
+
 ## Development
 
 Run `cargo fmt --all -- --check`, `cargo test --all-features`, and `cargo clippy --all-targets --all-features -- -D warnings`. Ordinary tests run offline after fetching dependencies. Screening returns candidates for review; it does not establish a legal determination.
