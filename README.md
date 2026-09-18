@@ -63,6 +63,10 @@ The optional `http` feature adds a blocking HTTPS client with request deadlines,
 
 Transient statuses have bounded retries. Numeric Retry-After values are respected within the delay limit; date-based or longer delays are returned to the caller. Transport and parse failures are not retried.
 
+## Cache
+
+The independent `cache` feature stores original XML and versioned acquisition metadata. Loads re-parse, verify the digest, and evaluate freshness. Missing, corrupt, and stale data are distinct outcomes. Atomic replacement preserves a previous complete file on write failure. Queries and indexes are never persisted.
+
 ## Development
 
 Run `cargo fmt --all -- --check`, `cargo test --all-features`, and `cargo clippy --all-targets --all-features -- -D warnings`. Ordinary tests run offline after fetching dependencies. Screening returns candidates for review; it does not establish a legal determination.

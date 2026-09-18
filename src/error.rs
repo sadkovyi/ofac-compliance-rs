@@ -65,6 +65,10 @@ pub enum Error {
     /// An underlying read or write failed.
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
+    /// A cache entry is corrupt, incompatible, or for another source.
+    #[cfg(feature = "cache")]
+    #[error("invalid cache entry: {0}")]
+    InvalidCache(&'static str),
     /// A network request failed. URLs and headers are deliberately omitted.
     #[cfg(feature = "http")]
     #[error("HTTP transport failed")]

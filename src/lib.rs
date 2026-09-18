@@ -20,3 +20,6 @@ pub const ALGORITHM_VERSION: &str = "ofac-compliance/1";
 
 #[cfg(feature = "http")]
 pub mod http;
+
+#[cfg(feature = "cache")]
+pub mod cache;
