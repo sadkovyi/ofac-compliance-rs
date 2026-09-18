@@ -67,6 +67,8 @@ Transient statuses have bounded retries. Numeric Retry-After values are respecte
 
 The independent `cache` feature stores original XML and versioned acquisition metadata. Loads re-parse, verify the digest, and evaluate freshness. Missing, corrupt, and stale data are distinct outcomes. Atomic replacement preserves a previous complete file on write failure. Queries and indexes are never persisted.
 
+An advisory writer lock prevents overlapping replacements, and older validation timestamps cannot overwrite newer snapshots. Use application-owned cache directories on a local filesystem.
+
 ## Development
 
 Run `cargo fmt --all -- --check`, `cargo test --all-features`, and `cargo clippy --all-targets --all-features -- -D warnings`. Ordinary tests run offline after fetching dependencies. Screening returns candidates for review; it does not establish a legal determination.

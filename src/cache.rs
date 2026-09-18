@@ -2,11 +2,11 @@
 //!
 //! Each directory holds at most one entry per supported list. Reads re-parse the
 //! XML and verify its digest; no serialized indexes or screening queries are
-//! stored. Writers atomically replace a complete file.
-//! Use a local filesystem with reliable atomic-rename semantics.
+//! stored. Writers use an advisory lock and atomically replace a complete file.
+//! Use a local filesystem with reliable file-lock and atomic-rename semantics.
 
 use std::{
-    fs::{self, File},
+    fs::{self, File, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
     time::SystemTime,
@@ -92,7 +92,7 @@ impl FileCache {
     }
 
     /// Atomically store a valid snapshot. Failed writes before replacement leave
-    /// the old file intact.
+    /// the old file intact. An older writer cannot replace a newer validation.
     /// Corrupt existing entries may be replaced by a valid snapshot.
     pub fn store(&self, snapshot: &Snapshot) -> Result<()> {
         if snapshot.source_bytes().len() > self.limits.max_bytes {
@@ -125,7 +125,25 @@ impl FileCache {
             return Err(Error::InvalidCache("metadata exceeds size limit"));
         }
         fs::create_dir_all(&self.directory)?;
+        let lock = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(self.directory.join("writer.lock"))?;
+        lock.lock()?;
         let path = self.path(snapshot.metadata.list);
+        match File::open(&path) {
+            Ok(file) => match self.read(file, snapshot.metadata.list) {
+                Ok(previous) if previous.metadata.validated_at > snapshot.metadata.validated_at => {
+                    return Err(Error::InvalidCache("refusing to replace a newer snapshot"));
+                }
+                Err(Error::Io(error)) => return Err(error.into()),
+                _ => {}
+            },
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
         let mut file = tempfile::NamedTempFile::new_in(&self.directory)?;
         file.write_all(MAGIC)?;
         let header_len = u32::try_from(header.len())
@@ -137,6 +155,7 @@ impl FileCache {
         file.persist(path).map_err(|error| Error::Io(error.error))?;
         #[cfg(unix)]
         File::open(&self.directory)?.sync_all()?;
+        // Dropping the lock handle releases the advisory lock on every path.
         Ok(())
     }
 

@@ -152,6 +152,28 @@ fn failed_store_retains_previous_entry() {
 }
 
 #[test]
+fn older_writer_cannot_overwrite_newer_snapshot() {
+    let directory = tempfile::tempdir().unwrap();
+    let cache = FileCache::new(directory.path());
+    cache.store(&snapshot(20)).unwrap();
+    assert!(cache.store(&snapshot(10)).is_err());
+    assert_eq!(
+        cache
+            .load(
+                List::Sdn,
+                FreshnessPolicy::RequireFresh(AGE),
+                UNIX_EPOCH + AGE
+            )
+            .unwrap()
+            .unwrap()
+            .snapshot
+            .metadata()
+            .retrieved_at,
+        UNIX_EPOCH + Duration::from_secs(20)
+    );
+}
+
+#[test]
 fn future_timestamps_do_not_look_fresh() {
     let directory = tempfile::tempdir().unwrap();
     let cache = FileCache::new(directory.path());
@@ -160,6 +182,34 @@ fn future_timestamps_do_not_look_fresh() {
         cache.load(List::Sdn, FreshnessPolicy::AllowStale(AGE), UNIX_EPOCH),
         Err(Error::ClockSkew(List::Sdn))
     ));
+}
+
+#[test]
+fn concurrent_writers_publish_only_complete_entries() {
+    let directory = tempfile::tempdir().unwrap();
+    let cache = FileCache::new(directory.path());
+    cache.store(&snapshot(0)).unwrap();
+    std::thread::scope(|scope| {
+        for _ in 0..4 {
+            let cache = &cache;
+            scope.spawn(move || {
+                for _ in 0..10 {
+                    cache.store(&snapshot(0)).unwrap();
+                    let hit = cache
+                        .load(List::Sdn, FreshnessPolicy::RequireFresh(AGE), UNIX_EPOCH)
+                        .unwrap()
+                        .unwrap();
+                    assert_eq!(hit.snapshot.source_bytes(), XML);
+                }
+            });
+        }
+    });
+    let files: Vec<_> = fs::read_dir(directory.path()).unwrap().collect();
+    assert_eq!(
+        files.len(),
+        2,
+        "one cache entry and one lock; no temporary files remain"
+    );
 }
 
 #[test]
