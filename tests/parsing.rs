@@ -84,6 +84,33 @@ fn rejects_incomplete_empty_and_unsupported_documents() {
 }
 
 #[test]
+fn rejects_missing_duplicate_and_nested_required_fields() {
+    for replacement in [
+        "",
+        "<uid/>",
+        "<uid>100</uid><uid>101</uid>",
+        "<uid><nested>100</nested></uid>",
+    ] {
+        assert!(parse(&SDN.replacen("<uid>100</uid>", replacement, 1)).is_err());
+    }
+    assert!(
+        parse(&SDN.replacen(
+            "<lastName>Example</lastName>",
+            "<lastName>!!!</lastName><firstName/>",
+            1
+        ))
+        .is_err()
+    );
+    assert!(
+        parse(&SDN.replace(
+            "<mainEntry>true</mainEntry>",
+            "<mainEntry>maybe</mainEntry>"
+        ))
+        .is_err()
+    );
+}
+
+#[test]
 fn rejects_duplicate_ids_and_publisher_count_mismatch() {
     assert!(matches!(
         parse(&SDN.replace("<uid>200</uid>", "<uid>100</uid>")),
@@ -137,6 +164,21 @@ fn enforces_each_resource_limit() {
 }
 
 #[test]
+fn rejects_invalid_utf8_and_does_not_read_entities() {
+    assert!(Snapshot::from_xml(List::Sdn, &[255, 254], UNIX_EPOCH).is_err());
+    assert!(parse(&SDN.replace("José", "&external;")).is_err());
+}
+
+#[test]
+fn handles_cdata_and_adjacent_text_without_losing_content() {
+    let xml = SDN.replace(
+        "<lastName>Example</lastName>",
+        "<lastName>Ex<![CDATA[amp]]>le</lastName>",
+    );
+    assert_eq!(parse(&xml).unwrap().entries()[0].last_name, "Example");
+}
+
+#[test]
 fn content_identity_is_stable_and_sensitive_to_changes() {
     let a = parse(SDN).unwrap();
     let b = parse(SDN).unwrap();
@@ -149,6 +191,24 @@ fn content_identity_is_stable_and_sensitive_to_changes() {
             .metadata()
             .digest
     );
+}
+
+#[test]
+fn arbitrary_small_inputs_and_all_truncations_fail_without_panicking() {
+    let xml = b"<sdnList><sdnEntry><uid>1</uid><lastName>Example</lastName><sdnType>Entity</sdnType></sdnEntry></sdnList>";
+    for end in 0..xml.len() {
+        assert!(Snapshot::from_xml(List::Sdn, &xml[..end], UNIX_EPOCH).is_err());
+    }
+    let mut state = 1_u64;
+    for len in 0..256 {
+        let bytes: Vec<u8> = (0..len)
+            .map(|_| {
+                state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+                (state >> 32) as u8
+            })
+            .collect();
+        let _ = Snapshot::from_xml(List::Sdn, &bytes, UNIX_EPOCH);
+    }
 }
 
 #[test]
