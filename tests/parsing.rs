@@ -241,3 +241,23 @@ fn reader_import_stops_at_the_limit_and_propagates_io_errors() {
         4
     );
 }
+
+#[test]
+fn wrong_namespaces_and_nested_entries_cannot_silently_drop_records() {
+    let xml = SDN.replace("<Record_Count>4</Record_Count>", "");
+    let wrong_namespace = xml.replacen("<sdnEntry>", "<sdnEntry xmlns='urn:wrong'>", 1);
+    assert!(parse(&wrong_namespace).is_err());
+    let nested = xml
+        .replacen("<sdnEntry>", "<wrapper><sdnEntry>", 1)
+        .replacen("</sdnEntry>", "</sdnEntry></wrapper>", 1);
+    assert!(parse(&nested).is_err());
+    let foreign_alias = xml.replacen("<aka>", "<aka xmlns='urn:wrong'>", 1);
+    assert!(parse(&foreign_alias).is_err());
+    let foreign_field = xml.replacen(
+        "<uid>100</uid>",
+        "<uid>100</uid><uid xmlns='urn:wrong'>200</uid>",
+        1,
+    );
+    assert!(parse(&foreign_field).is_err());
+    assert!(parse(&xml.replace("<program>TEST</program>", "<program/>")).is_err());
+}

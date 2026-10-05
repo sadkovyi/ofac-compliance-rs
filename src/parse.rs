@@ -75,6 +75,15 @@ pub(crate) fn parse(list: List, bytes: &[u8], limits: &ParseLimits) -> Result<Pa
     let mut pending = vec![(root, 1)];
     while let Some((node, depth)) = pending.pop() {
         limit(depth, limits.max_depth, "XML depth")?;
+        if node.is_element()
+            && node.tag_name().name() == "sdnEntry"
+            && (node.parent() != Some(root)
+                || node.tag_name().namespace() != root.tag_name().namespace())
+        {
+            return Err(Error::InvalidDocument(
+                "unexpected entity location or namespace",
+            ));
+        }
         if node.is_text() {
             limit(
                 node.text().unwrap_or_default().len(),
@@ -192,7 +201,13 @@ fn parse_entry(node: Node<'_, '_>, limits: &ParseLimits) -> Result<Entry> {
         .collect::<Result<Vec<_>>>()?;
     let programs = records(node, "programList", "program")?
         .into_iter()
-        .map(|p| scalar(p, "program"))
+        .map(|p| {
+            let value = scalar(p, "program")?;
+            if value.is_empty() {
+                return Err(Error::InvalidField("program"));
+            }
+            Ok(value)
+        })
         .collect::<Result<Vec<_>>>()?;
     const MODELED: &[&str] = &[
         "uid",
@@ -303,6 +318,7 @@ fn child<'a, 'input>(
     node: Node<'a, 'input>,
     name: &'static str,
 ) -> Result<Option<Node<'a, 'input>>> {
+    reject_foreign_field(node, name)?;
     let mut found = children(node, name);
     let value = found.next();
     if found.next().is_some() {
@@ -317,9 +333,23 @@ fn records<'a, 'input>(
     item: &'static str,
 ) -> Result<Vec<Node<'a, 'input>>> {
     match child(node, container)? {
-        Some(node) => Ok(children(node, item).collect()),
+        Some(node) => {
+            reject_foreign_field(node, item)?;
+            Ok(children(node, item).collect())
+        }
         None => Ok(Vec::new()),
     }
+}
+
+fn reject_foreign_field(node: Node<'_, '_>, name: &'static str) -> Result<()> {
+    if node.children().any(|n| {
+        n.is_element()
+            && n.tag_name().name() == name
+            && n.tag_name().namespace() != node.tag_name().namespace()
+    }) {
+        return Err(Error::InvalidField(name));
+    }
+    Ok(())
 }
 
 fn scalar(node: Node<'_, '_>, name: &'static str) -> Result<String> {
