@@ -23,3 +23,7 @@ pub mod http;
 
 #[cfg(feature = "cache")]
 pub mod cache;
+
+/// Unicode data version used by name normalization. Included in dataset identity
+/// so a dependency update cannot silently reuse a prior normalization identity.
+pub const UNICODE_VERSION: (u8, u8, u8) = unicode_normalization::UNICODE_VERSION;

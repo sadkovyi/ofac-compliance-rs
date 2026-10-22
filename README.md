@@ -69,6 +69,8 @@ The independent `cache` feature stores original XML and versioned acquisition me
 
 An advisory writer lock prevents overlapping replacements, and older validation timestamps cannot overwrite newer snapshots. Use application-owned cache directories on a local filesystem.
 
+Reports and dataset fingerprints include the Unicode data version as well as the matching algorithm version.
+
 ## Development
 
 Run `cargo fmt --all -- --check`, `cargo test --all-features`, and `cargo clippy --all-targets --all-features -- -D warnings`. Ordinary tests run offline after fetching dependencies. Screening returns candidates for review; it does not establish a legal determination.

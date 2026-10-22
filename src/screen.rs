@@ -145,6 +145,8 @@ pub struct Report<'a> {
     pub snapshot_id: &'a str,
     /// Version of normalization and matching semantics.
     pub algorithm_version: &'static str,
+    /// Unicode data version used by name normalization.
+    pub unicode_version: (u8, u8, u8),
     /// Timestamp used to evaluate freshness.
     pub screened_at: SystemTime,
     /// Freshness policy used for this operation.
@@ -226,7 +228,7 @@ impl Screener {
                 return Err(Error::MissingList(*list));
             }
         }
-        let mut identity = String::from(ALGORITHM_VERSION);
+        let mut identity = format!("{ALGORITHM_VERSION}\nunicode={:?}", crate::UNICODE_VERSION);
         let mut names = Vec::new();
         let mut exact: HashMap<String, Vec<usize>> = HashMap::new();
         let mut identifiers: HashMap<String, Vec<(Location, usize)>> = HashMap::new();
@@ -391,6 +393,7 @@ impl Screener {
         Ok(Report {
             snapshot_id: &self.snapshot_id,
             algorithm_version: ALGORITHM_VERSION,
+            unicode_version: crate::UNICODE_VERSION,
             screened_at: now,
             freshness_policy: self.policy,
             sources,
@@ -480,6 +483,7 @@ impl Screener {
         Ok(Report {
             snapshot_id: &self.snapshot_id,
             algorithm_version: ALGORITHM_VERSION,
+            unicode_version: crate::UNICODE_VERSION,
             screened_at: now,
             freshness_policy: self.policy,
             sources,
