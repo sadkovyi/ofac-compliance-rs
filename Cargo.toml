@@ -32,6 +32,10 @@ tempfile = "3"
 name = "refresh"
 required-features = ["http", "cache"]
 
+[[bench]]
+name = "screening"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

@@ -71,6 +71,8 @@ An advisory writer lock prevents overlapping replacements, and older validation 
 
 Reports and dataset fingerprints include the Unicode data version as well as the matching algorithm version.
 
+Run `cargo bench --bench screening` for separate parsing, indexing, exact, batch, and fuzzy workloads. See [performance notes](docs/performance.md) for methodology.
+
 ## Development
 
 Run `cargo fmt --all -- --check`, `cargo test --all-features`, and `cargo clippy --all-targets --all-features -- -D warnings`. Ordinary tests run offline after fetching dependencies. Screening returns candidates for review; it does not establish a legal determination.
