@@ -1,18 +1,23 @@
 # ofac-compliance
 
-A Rust library for screening against OFAC sanctions publications.
+Parse OFAC sanctions publications and screen names and identifiers in Rust.
+Queries run against immutable, reusable snapshots, without network or disk I/O.
 
-Requires Rust 1.89 or later. Licensed under MIT OR Apache-2.0.
+- Standard SDN and consolidated non-SDN XML, including aliases and identifying fields.
+- Indexed exact name and identifier lookup; configurable fuzzy name matching.
+- Results include source IDs, matched names, scores, snapshot digests, and freshness.
+- Optional HTTPS acquisition and an atomic disk cache. No default features or async runtime.
 
-## Source data
+Requires Rust 1.89 or later. The API is pre-1.0.
 
-Parse standard SDN and consolidated non-SDN XML. Retain source IDs, primary names, aliases, identifying attributes, program tags, and unmodeled fields. The caller must identify the publication because both exports use the same XML structure.
+## Getting started
 
-Formats are described by [OFAC’s Sanctions List Service](https://ofac.treasury.gov/sanctions-list-service) and [standard XML schema](https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/XML.xsd). Tests use synthetic records.
+Until the first crates.io release, use a local path dependency:
 
-Parser limits bound bytes, nodes, depth, records, text, and names. Duplicate IDs, count mismatches, empty publications, DTDs, and malformed XML fail explicitly.
-
-## Screening
+```toml
+[dependencies]
+ofac-compliance = { path = "../ofac-compliance-rs" }
+```
 
 ```rust
 use std::time::{Duration, SystemTime};
@@ -41,38 +46,104 @@ assert!(!report.truncated());
 # Ok::<(), ofac_compliance::Error>(())
 ```
 
-Exact matching uses NFKC, Unicode lowercase, and separator collapse. Diacritics and non-Latin scripts are retained. Required publications must be present; freshness is evaluated for every query. Results include the matched name, original source entity, age, and content identity.
+Supply both `List::Sdn` and `List::Consolidated` as requirements when both are
+needed. Construction fails if a required publication is missing. Each query
+checks freshness, including queries with no matches. Caller-supplied timestamps
+must describe when the bytes were actually acquired; parsing an old file does
+not make its contents fresh.
 
-Weak aliases are included unless disabled. Results are deduplicated by entity, ranked deterministically, and unlimited unless `with_limit` is set; `total_candidates` and `truncated()` expose omissions. Queries are bounded to 4 KiB.
+## Matching
 
-`NameOptions::fuzzy(threshold)?` evaluates Jaro-Winkler across all names with optional sorted-token comparison. Thresholds in `(0, 1]` are similarity scores, not probabilities or OFAC search scores. Calibrate them on labeled examples.
+`NameOptions::exact()` uses Unicode NFKC normalization and Unicode lowercase.
+Runs of characters other than letters, numbers, and combining marks become one
+space. Diacritics and non-Latin scripts are preserved.
+It does not transliterate or perform full Unicode case folding.
 
-`lookup_identifier` preserves identifier case and punctuation and accepts an optional normalized type filter. Dates and addresses remain review evidence rather than automatic exclusion rules.
+`NameOptions::fuzzy(threshold)?` evaluates Jaro-Winkler similarity against every
+primary name and alias. It also compares sorted tokens by default, so reordered
+names can match. Thresholds are explicit, in `(0, 1]`, and are **not probabilities**
+or OFAC search scores. Select a threshold using labeled examples from your use
+case. There is no universal recommended threshold.
 
-`screen_batch_at` uses one timestamp and fails the batch on invalid input. A screener can be shared between threads without query-side locks.
+Weak aliases are included and labeled in source data. Use
+`with_weak_aliases(false)` to exclude them. Each entity appears once, with its
+best match. Ties prefer the primary name, then source alias order. Result ordering
+is stable: descending score, list, then lexicographic entity ID.
 
-Enable `serde` to serialize records, provenance, policy, and reports. Snapshots cannot be deserialized around their validation boundary.
+`lookup_identifier(value, kind)` performs case-sensitive, punctuation-sensitive
+equality after trimming outer whitespace. The optional type filter is normalized
+like a name. This preserves distinctions in case-sensitive identifiers such as
+digital currency addresses. Dates, addresses, countries, and remarks are exposed
+for review; they do not silently suppress name candidates.
 
-`Snapshot::from_reader` and its configurable-limit counterpart support bounded file and reader imports. Caller-supplied acquisition timestamps must describe the bytes, not the time an old file was opened.
+Reports record the algorithm and Unicode data versions. Results are unlimited
+unless `with_limit(NonZeroUsize)` is set. Even with a limit,
+`total_candidates` reports all qualifying entities and `truncated()` indicates
+omissions. Query inputs are limited to 4 KiB. Keep the original query alongside
+the report when recording an audit; the library does not log or store queries.
 
-## Acquisition
+## Optional features
 
-The optional `http` feature adds a blocking HTTPS client with request deadlines, redirect limits, and bounded bodies. No network activity starts automatically. Async applications should use a blocking pool for acquisition.
+| Feature | Adds |
+| --- | --- |
+| `http` | Blocking HTTPS downloads, conditional refresh, timeouts, bounded retries |
+| `cache` | Raw XML and metadata cache, integrity checks, file locking, atomic replacement |
+| `serde` | Serialization of source records, metadata, matching policies, and reports |
 
-`HttpClient::refresh(list, previous)` uses matching source validators when available. A valid 304 advances validation time without replacing bytes or retrieval time. Failure leaves the old snapshot untouched.
+`cache` enables `serde`. Features can be used independently. The cache stores no
+screening results or indexes, so every load uses the current parser and every
+screener builds indexes with the current matching algorithm.
 
-Transient statuses have bounded retries. Numeric Retry-After values are respected within the delay limit; date-based or longer delays are returned to the caller. Transport and parse failures are not retried.
+With `http`, `HttpClient::refresh(list, previous)` returns a new snapshot only
+after a successful download and parse, or a valid HTTP 304 response. It leaves
+the previous snapshot untouched on failure. A 304 advances `validated_at` while
+preserving `retrieved_at`. Both timestamps remain distinct from the publisher's
+date. No polling or background refresh starts automatically.
 
-## Cache
+With `cache`, `FileCache::load` distinguishes missing data, corruption, and stale
+data. `AllowStale(max_age)` explicitly permits stale results and marks them in
+every report. Neither cache loading nor failed refreshes reset source age.
+Cache directories should be application-owned and reside on a local filesystem
+with working locks and atomic rename. See [the refresh example](examples/refresh.rs)
+for explicit acquisition and persistence.
 
-The independent `cache` feature stores original XML and versioned acquisition metadata. Loads re-parse, verify the digest, and evaluate freshness. Missing, corrupt, and stale data are distinct outcomes. Atomic replacement preserves a previous complete file on write failure. Queries and indexes are never persisted.
+## Data coverage
 
-An advisory writer lock prevents overlapping replacements, and older validation timestamps cannot overwrite newer snapshots. Use application-owned cache directories on a local filesystem.
+The parser accepts the standard `SDN.XML` and `CONSOLIDATED.XML` publications
+linked from [OFAC's Sanctions List Service](https://ofac.treasury.gov/sanctions-list-service).
+It supports the current standard XML namespace, its legacy namespace, and
+unqualified documents. It rejects DTDs, malformed XML, empty publications,
+duplicate IDs, invalid required fields, and publisher record-count mismatches.
+Input bytes, node count, depth, entry count, text, and name sizes are bounded.
 
-Reports and dataset fingerprints include the Unicode data version as well as the matching algorithm version.
+Advanced/enhanced XML, CSV, delta files, and customized datasets are not supported.
+The caller identifies the publication for offline imports because both standard
+exports use the same root schema. Consolidated entries retain program tags;
+membership alone is not treated as equivalent to an SDN blocking designation.
+See [data format notes](docs/data-sources.md) for source references and limits.
 
-Run `cargo bench --bench screening` for separate parsing, indexing, exact, batch, and fuzzy workloads. See [performance notes](docs/performance.md) for methodology.
+Screening produces candidates for review. A no-match result is scoped to the
+query, loaded publications, timestamp, and matching policy. This library does
+not implement ownership analysis, the 50 Percent Rule, or transaction-specific
+legal determinations.
 
 ## Development
 
-Run `cargo fmt --all -- --check`, `cargo test --all-features`, and `cargo clippy --all-targets --all-features -- -D warnings`. Ordinary tests run offline after fetching dependencies. Screening returns candidates for review; it does not establish a legal determination.
+```sh
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test
+cargo test --no-default-features
+cargo test --all-features
+cargo doc --no-deps --all-features
+cargo bench --bench screening
+```
+
+Tests use synthetic fixtures and do not contact OFAC. The live download test is
+ignored by default. Benchmark workloads and measurement instructions are in
+[docs/performance.md](docs/performance.md). Contribution guidance is in
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
+Licensed under either the Apache License, Version 2.0, or the MIT license, at
+your option.
+

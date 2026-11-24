@@ -33,3 +33,29 @@ separately with an OS profiler; retained XML, parsed records, and indexes all
 contribute. On Linux, an installed GNU `time` can report peak RSS for the built
 benchmark executable. Do not include Cargo's compilation memory in that number.
 
+## Initial measurement
+
+Measured on Linux x86-64, AMD Ryzen 7 9800X3D, Rust 1.89.0, release profile,
+with no optional features. Dataset: 10,000 entries, 30,000 names, 3,188,982 XML
+bytes. Medians of five samples on 2026-11-23:
+
+| Operation | Median |
+| --- | ---: |
+| Parse XML and compute digest | 44.29 ms |
+| Build indexes from a parsed snapshot | 23.48 ms |
+| Exact name lookup | 625 ns |
+| Exact identifier lookup | 81 ns |
+| Batch of 256 exact names | 169.00 µs |
+| Fuzzy name lookup | 10.31 ms |
+
+Whole-process peak RSS was 78,700 KiB (76.9 MiB), measured by launching the built
+benchmark directly and reading `getrusage(RUSAGE_CHILDREN)`. This includes the
+retained dataset, an existing screener, and temporary parse/index allocations;
+it is not a steady-state per-screener memory estimate.
+
+The measurement used local source overrides for roxmltree 0.20.0,
+unicode-normalization 0.1.26, and tinyvec 1.13.3 because registry access was
+unavailable. Matching used strsim 0.11.1. No HTTP or TLS code participates in
+these workloads. Reproduce the measurements with the resolved dependency graph
+before using them for capacity planning. Record before/after results with a
+change when performance is its motivation.

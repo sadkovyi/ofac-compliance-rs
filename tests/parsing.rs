@@ -35,7 +35,7 @@ fn preserves_source_attributes_and_publication_metadata() {
     );
     assert_eq!(
         snapshot.metadata().published_date.as_deref(),
-        Some("01/01/2020")
+        Some("11/20/2026")
     );
     assert_eq!(snapshot.metadata().declared_count, Some(4));
     assert_eq!(snapshot.source_bytes(), SDN.as_bytes());

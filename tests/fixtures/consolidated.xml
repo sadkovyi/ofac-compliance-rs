@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Synthetic fixture. UID intentionally overlaps the SDN fixture. -->
 <sdnList xmlns="https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/XML">
-  <publshInformation><Publish_Date>01/01/2020</Publish_Date><Record_Count>1</Record_Count></publshInformation>
+  <publshInformation><Publish_Date>11/19/2026</Publish_Date><Record_Count>1</Record_Count></publshInformation>
   <sdnEntry>
     <uid>100</uid><lastName>Example Trading Ltd</lastName><sdnType>Entity</sdnType>
     <programList><program>TEST-NON-SDN</program></programList>

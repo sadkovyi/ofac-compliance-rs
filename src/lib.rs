@@ -4,25 +4,22 @@ mod error;
 mod model;
 mod normalize;
 mod parse;
+mod screen;
+mod snapshot;
+
+#[cfg(feature = "cache")]
+pub mod cache;
+#[cfg(feature = "http")]
+pub mod http;
 
 pub use error::{Error, Result};
 pub use model::{Address, Alias, Country, DateOfBirth, Entry, Identifier, List, SourceField};
 pub use parse::ParseLimits;
-
-mod snapshot;
-pub use snapshot::{Freshness, FreshnessPolicy, Snapshot, SnapshotMetadata};
-
-mod screen;
 pub use screen::{Candidate, Evidence, MatchMethod, NameOptions, Report, Screener, SourceStatus};
+pub use snapshot::{Freshness, FreshnessPolicy, Snapshot, SnapshotMetadata};
 
 /// Version of normalization, scoring, and ranking semantics.
 pub const ALGORITHM_VERSION: &str = "ofac-compliance/1";
-
-#[cfg(feature = "http")]
-pub mod http;
-
-#[cfg(feature = "cache")]
-pub mod cache;
 
 /// Unicode data version used by name normalization. Included in dataset identity
 /// so a dependency update cannot silently reuse a prior normalization identity.
