@@ -6,6 +6,7 @@ rust-version = "1.89"
 description = "OFAC sanctions list parsing and explainable, offline screening"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
+repository = "https://github.com/sadkovyi/ofac-compliance-rs"
 keywords = ["ofac", "sanctions", "screening", "compliance"]
 categories = ["text-processing", "parser-implementations"]
 include = ["src/**", "examples/**", "tests/**", "benches/**", "Cargo.toml", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md", "LICENSE-*", "docs/**"]

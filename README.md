@@ -12,11 +12,11 @@ Requires Rust 1.89 or later. The API is pre-1.0.
 
 ## Getting started
 
-Until the first crates.io release, use a local path dependency:
+Add the library to your project:
 
 ```toml
 [dependencies]
-ofac-compliance = { path = "../ofac-compliance-rs" }
+ofac-compliance = "0.1"
 ```
 
 ```rust
