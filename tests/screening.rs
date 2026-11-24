@@ -280,7 +280,9 @@ fn freshness_is_checked_on_every_query_including_no_match() {
             .screen_name_at("Nobody", NameOptions::exact(), at_limit)
             .is_ok()
     );
-    let stale = at_limit + Duration::from_nanos(1);
+    // SystemTime does not represent individual nanoseconds on every platform.
+    let stale = at_limit + Duration::from_millis(1);
+    assert!(stale > at_limit);
     assert!(matches!(
         screener.screen_name_at("Nobody", NameOptions::exact(), stale),
         Err(Error::StaleSnapshot { .. })
