@@ -69,14 +69,19 @@ impl HttpClient {
                 "invalid HTTP timeout or retry bounds",
             ));
         }
-        let agent = ureq::AgentBuilder::new()
+        let config = ureq::Agent::config_builder()
             .https_only(true)
-            .redirects(3)
-            .timeout(options.timeout)
-            .timeout_connect(options.connect_timeout)
+            .max_redirects(3)
+            .timeout_global(Some(options.timeout))
+            .timeout_connect(Some(options.connect_timeout))
+            // Keep status responses available to our bounded retry policy.
+            .http_status_as_error(false)
             .user_agent(concat!("ofac-compliance/", env!("CARGO_PKG_VERSION")))
             .build();
-        Ok(Self { agent, options })
+        Ok(Self {
+            agent: config.into(),
+            options,
+        })
     }
 
     /// Fetch and validate a complete publication. A previous snapshot enables
@@ -91,37 +96,16 @@ impl HttpClient {
                 let mut request = self
                     .agent
                     .get(list.url())
-                    .set("Accept", "application/xml")
-                    .set("Accept-Encoding", "identity");
+                    .header("Accept", "application/xml")
+                    .header("Accept-Encoding", "identity");
                 if let Some(etag) = etag {
-                    request = request.set("If-None-Match", etag);
+                    request = request.header("If-None-Match", etag);
                 }
                 if let Some(modified) = modified {
-                    request = request.set("If-Modified-Since", modified);
+                    request = request.header("If-Modified-Since", modified);
                 }
-                let response = match request.call() {
-                    Ok(response) | Err(ureq::Error::Status(_, response)) => response,
-                    Err(ureq::Error::Transport(_)) => return Err(Error::Transport),
-                };
-                // Content encodings are disabled to bound the bytes we parse and
-                // hash. A server ignoring identity is rejected, not misinterpreted.
-                if response
-                    .header("Content-Encoding")
-                    .is_some_and(|s| !s.eq_ignore_ascii_case("identity"))
-                {
-                    return Err(Error::InvalidDocument("unexpected HTTP content encoding"));
-                }
-                let result = Response {
-                    status: response.status(),
-                    etag: header(&response, "ETag")?,
-                    last_modified: header(&response, "Last-Modified")?,
-                    retry_after: header(&response, "Retry-After")?,
-                    content_length: response
-                        .header("Content-Length")
-                        .and_then(|s| s.parse().ok()),
-                    body: response.into_reader(),
-                };
-                Ok(result)
+                let response = request.call().map_err(|_| Error::Transport)?;
+                into_response(response)
             },
             std::thread::sleep,
         )
@@ -222,20 +206,49 @@ impl HttpClient {
     }
 }
 
-fn header(response: &ureq::Response, key: &str) -> Result<Option<String>> {
-    match response.header(key) {
+fn into_response(response: ureq::http::Response<ureq::Body>) -> Result<Response> {
+    let headers = response.headers();
+    // Reject encodings exposed by ureq before reading. If another dependency
+    // enables its decoders, refresh_using still bounds the decoded bytes.
+    if header(headers, "Content-Encoding")?.is_some_and(|s| !s.eq_ignore_ascii_case("identity")) {
+        return Err(Error::InvalidDocument("unexpected HTTP content encoding"));
+    }
+    Ok(Response {
+        status: response.status().as_u16(),
+        etag: header(headers, "ETag")?,
+        last_modified: header(headers, "Last-Modified")?,
+        retry_after: header(headers, "Retry-After")?,
+        content_length: header(headers, "Content-Length")?.and_then(|s| s.parse().ok()),
+        body: Box::new(response.into_body().into_reader()),
+    })
+}
+
+fn header(headers: &ureq::http::HeaderMap, key: &str) -> Result<Option<String>> {
+    match headers.get(key) {
         Some(value) if value.len() > 4096 => Err(Error::LimitExceeded {
             resource: "HTTP header bytes",
             limit: 4096,
         }),
-        value => Ok(value.map(str::to_owned)),
+        Some(value) => value
+            .to_str()
+            .map(|s| Some(s.to_owned()))
+            .map_err(|_| Error::InvalidDocument("invalid HTTP header value")),
+        None => Ok(None),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{cell::Cell, io::Cursor, time::UNIX_EPOCH};
+    use std::{
+        cell::Cell,
+        io::Cursor,
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
+        time::UNIX_EPOCH,
+    };
 
     const XML: &[u8] = include_bytes!("../tests/fixtures/sdn.xml");
 
@@ -252,6 +265,164 @@ mod tests {
 
     fn client() -> HttpClient {
         HttpClient::new(HttpOptions::default()).unwrap()
+    }
+
+    #[test]
+    fn ureq_configuration_preserves_acquisition_guards() {
+        let options = HttpOptions {
+            timeout: Duration::from_secs(17),
+            connect_timeout: Duration::from_secs(3),
+            ..HttpOptions::default()
+        };
+        let client = HttpClient::new(options.clone()).unwrap();
+        let config = client.agent.config();
+        assert!(config.https_only());
+        assert_eq!(config.max_redirects(), 3);
+        assert!(!config.http_status_as_error());
+        assert_eq!(config.timeouts().global, Some(options.timeout));
+        assert_eq!(config.timeouts().connect, Some(options.connect_timeout));
+    }
+
+    #[test]
+    fn ureq_refresh_sends_validators_and_keeps_exact_source_bytes() {
+        let mut client = HttpClient::new(HttpOptions {
+            parse_limits: ParseLimits {
+                max_bytes: XML.len(),
+                ..ParseLimits::default()
+            },
+            ..HttpOptions::default()
+        })
+        .unwrap();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = calls.clone();
+        client.agent = ureq::Agent::config_builder()
+            .middleware(
+                move |request: ureq::http::Request<ureq::SendBody>,
+                      _: ureq::middleware::MiddlewareNext| {
+                    assert_eq!(request.uri().to_string(), List::Sdn.url());
+                    assert_eq!(request.headers()["accept"], "application/xml");
+                    assert_eq!(request.headers()["accept-encoding"], "identity");
+                    let first = observed.fetch_add(1, Ordering::SeqCst) == 0;
+                    if first {
+                        assert!(!request.headers().contains_key("if-none-match"));
+                        assert!(!request.headers().contains_key("if-modified-since"));
+                    } else {
+                        assert_eq!(request.headers()["if-none-match"], "\"v1\"");
+                        assert_eq!(
+                            request.headers()["if-modified-since"],
+                            "Mon, 23 Nov 2026 00:00:00 GMT"
+                        );
+                    }
+                    Ok(ureq::http::Response::builder()
+                        .status(if first { 200 } else { 304 })
+                        .header("etag", if first { "\"v1\"" } else { "\"v2\"" })
+                        .header("last-modified", "Mon, 23 Nov 2026 00:00:00 GMT")
+                        .header("content-length", XML.len())
+                        .body(ureq::Body::builder().data(if first { XML } else { b"" }))
+                        .unwrap())
+                },
+            )
+            .build()
+            .into();
+
+        let original = client.refresh(List::Sdn, None).unwrap();
+        let refreshed = client.refresh(List::Sdn, Some(&original)).unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        assert_eq!(original.source_bytes(), XML);
+        assert_eq!(refreshed.source_bytes(), XML);
+        assert_eq!(refreshed.metadata().digest, original.metadata().digest);
+        assert_eq!(
+            refreshed.metadata().retrieved_at,
+            original.metadata().retrieved_at
+        );
+        assert_eq!(refreshed.metadata().etag.as_deref(), Some("\"v2\""));
+        assert_eq!(original.metadata().etag.as_deref(), Some("\"v1\""));
+    }
+
+    #[test]
+    fn ureq_headers_are_validated_before_reading_the_body() {
+        struct Unread;
+        impl Read for Unread {
+            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+                panic!("invalid response body must not be read");
+            }
+        }
+        for (name, value) in [
+            ("etag", vec![b'x'; 4097]),
+            ("etag", vec![0x80]),
+            ("content-encoding", b"gzip".to_vec()),
+        ] {
+            let response = ureq::http::Response::builder()
+                .header(name, ureq::http::HeaderValue::from_bytes(&value).unwrap())
+                .body(ureq::Body::builder().reader(Unread))
+                .unwrap();
+            assert!(matches!(
+                into_response(response),
+                Err(Error::LimitExceeded { .. } | Error::InvalidDocument(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn ureq_reader_stops_after_the_limit_plus_one_byte() {
+        struct Counted(Arc<AtomicUsize>);
+        impl Read for Counted {
+            fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+                buffer.fill(b'x');
+                self.0.fetch_add(buffer.len(), Ordering::SeqCst);
+                Ok(buffer.len())
+            }
+        }
+        let bytes_read = Arc::new(AtomicUsize::new(0));
+        let client = HttpClient::new(HttpOptions {
+            parse_limits: ParseLimits {
+                max_bytes: 16,
+                ..ParseLimits::default()
+            },
+            ..HttpOptions::default()
+        })
+        .unwrap();
+        let result = client.refresh_using(
+            List::Sdn,
+            None,
+            UNIX_EPOCH,
+            |_, _| {
+                into_response(ureq::http::Response::new(
+                    ureq::Body::builder().reader(Counted(bytes_read.clone())),
+                ))
+            },
+            |_| panic!("body failures must not be retried"),
+        );
+        assert!(matches!(
+            result,
+            Err(Error::LimitExceeded { limit: 16, .. })
+        ));
+        assert_eq!(bytes_read.load(Ordering::SeqCst), 17);
+    }
+
+    #[test]
+    fn ureq_body_errors_are_returned_without_retrying() {
+        struct Broken;
+        impl Read for Broken {
+            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("synthetic read failure"))
+            }
+        }
+        let calls = Cell::new(0);
+        let result = client().refresh_using(
+            List::Sdn,
+            None,
+            UNIX_EPOCH,
+            |_, _| {
+                calls.set(calls.get() + 1);
+                into_response(ureq::http::Response::new(
+                    ureq::Body::builder().reader(Broken),
+                ))
+            },
+            |_| panic!("body failures must not be retried"),
+        );
+        assert!(matches!(result, Err(Error::Io(_))));
+        assert_eq!(calls.get(), 1);
     }
 
     #[test]
