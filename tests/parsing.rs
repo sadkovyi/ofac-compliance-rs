@@ -167,6 +167,32 @@ fn enforces_each_resource_limit() {
 fn rejects_invalid_utf8_and_does_not_read_entities() {
     assert!(Snapshot::from_xml(List::Sdn, &[255, 254], UNIX_EPOCH).is_err());
     assert!(parse(&SDN.replace("José", "&external;")).is_err());
+    for declaration in [
+        "<!DOCTYPE sdnList SYSTEM 'https://entities.invalid/list.dtd'>",
+        "<!DOCTYPE sdnList [<!ENTITY external SYSTEM 'file:///must-not-be-read'>]>",
+    ] {
+        assert!(matches!(
+            parse(&format!("{declaration}<sdnList>&external;</sdnList>")),
+            Err(Error::InvalidDocument("DTD declarations are not supported"))
+        ));
+    }
+}
+
+#[test]
+fn deeply_nested_xml_returns_a_depth_error_without_overflowing_the_stack() {
+    let depth = 16_384;
+    let xml = format!(
+        "<sdnList>{}{}</sdnList>",
+        "<nested>".repeat(depth),
+        "</nested>".repeat(depth)
+    );
+    assert!(matches!(
+        parse(&xml),
+        Err(Error::LimitExceeded {
+            resource: "XML depth",
+            limit: 64,
+        })
+    ));
 }
 
 #[test]

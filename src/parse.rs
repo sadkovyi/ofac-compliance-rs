@@ -59,6 +59,7 @@ pub(crate) fn parse(list: List, bytes: &[u8], limits: &ParseLimits) -> Result<Pa
         ParsingOptions {
             allow_dtd: false,
             nodes_limit: limits.max_nodes,
+            entity_resolver: None,
         },
     )?;
     let root = document.root_element();
