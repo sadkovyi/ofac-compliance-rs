@@ -63,8 +63,12 @@ Retries apply to 408, 429, 500, 502, 503, and 504 responses only. Numeric
 `Retry-After` values are honored within the configured delay bound. HTTP-date
 values and longer delays are returned as errors for the caller to schedule.
 Transport errors, body read errors, and invalid publications are not retried.
-Responses other than 200 or a valid conditional 304 are rejected. No compression
-is requested; unexpected content encodings are rejected.
+Responses other than 200 or a valid conditional 304 are rejected. Requests use
+identity encoding, and this crate enables only ureq's Rustls feature. Unsupported
+content encodings exposed by ureq are rejected before reading the body. If another
+dependency enables ureq's decoding features, ureq may decode the response and
+remove its encoding headers. The download limit still applies to the bytes passed
+to the XML parser; snapshots and digests describe those bytes.
 
 ## Cache format
 
